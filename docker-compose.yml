@@ -1,0 +1,31 @@
+# docker compose up — brings up a real SMTP+IMAP test mailbox
+# (GreenMail) plus the agent. Reproducible by anyone with zero mail
+# provider credentials: this IS the "test inbox" the brief asks for
+# (see SYSTEM_DESIGN.md §6, assumption 2).
+
+services:
+  mailserver:
+    image: greenmail/standalone:2.1.9
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp
+        -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=agent:${EMAIL_PASSWORD:-agent-pass}@wakesmith.test,prospect:${EMAIL_PASSWORD:-agent-pass}@wakesmith.test
+    ports:
+      - "3025:3025" # SMTP
+      - "3143:3143" # IMAP
+
+  agent:
+    build: .
+    depends_on:
+      - mailserver
+    environment:
+      CONFIG_PATH: config/config.yaml
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-agent-pass}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./memory:/app/memory

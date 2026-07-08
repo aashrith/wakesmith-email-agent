@@ -1,0 +1,39 @@
+# Config-driven per SYSTEM_DESIGN.md §5: gig, budget, tone, and calendar
+# slots all live here, not in code. Secrets (API keys, mailbox password)
+# come from the environment instead — see .env.example.
+
+gig:
+  id: sample-gig
+  title: Contract Backend Engineer
+  description: 4-week contract building out a billing pipeline.
+  budgetMin: 60
+  budgetMax: 100
+  tone: warm, concise, non-salesy
+
+llm:
+  model: anthropic/claude-3.5-sonnet
+  # baseUrl: https://openrouter.ai/api/v1   # override if needed
+
+email:
+  smtpHost: mailserver
+  smtpPort: 3025
+  imapHost: mailserver
+  imapPort: 3143
+  username: agent@wakesmith.test
+  fromAddress: agent@wakesmith.test
+  secure: false
+
+calendar:
+  availableSlots:
+    - "2026-07-10T15:00:00Z"
+    - "2026-07-11T15:00:00Z"
+    - "2026-07-12T15:00:00Z"
+    - "2026-07-13T15:00:00Z"
+    - "2026-07-14T15:00:00Z"
+
+memory:
+  threadsDir: memory/threads
+  calendarStatePath: memory/calendar_slots.json
+
+polling:
+  intervalMs: 15000
