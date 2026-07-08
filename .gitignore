@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.timestamp-*.mjs
+.env
+memory/threads/*.md
+!memory/threads/.gitkeep
+memory/calendar_slots.json
+transcripts/.calendar_slots.json
+*.log
