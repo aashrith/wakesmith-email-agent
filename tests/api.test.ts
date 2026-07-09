@@ -14,6 +14,8 @@ function makeContainer(): Container {
     calendar: new FakeCalendarGateway(),
     memory: new FakeMemoryRepository(),
     pollingIntervalMs: 60_000,
+    followUpThresholdMs: 3 * 86_400_000,
+    followUpMaxNudges: 2,
   };
 }
 
@@ -96,5 +98,26 @@ describe("API", () => {
     const detail = (await res.json()) as { messages: Array<{ direction: string }> };
     expect(detail.messages).toHaveLength(1);
     expect(detail.messages[0]!.direction).toBe("out");
+  });
+
+  it("POST /check-silence accepts a threshold override for demo purposes", async () => {
+    await app.handle(
+      new Request("http://localhost/outreach", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prospectId: "p-1", prospectName: "Sam", prospectEmail: "sam@example.com" }),
+      }),
+    );
+
+    const res = await app.handle(
+      new Request("http://localhost/check-silence", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ thresholdMs: 0 }), // force it to look "quiet" immediately
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { nudged: string[]; closed: string[] };
+    expect(body.nudged.length + body.closed.length).toBeGreaterThan(0);
   });
 });

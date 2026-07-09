@@ -102,4 +102,8 @@ export class ScriptedLLMAgent implements LLMAgent {
     }
     return this.handleTurnFn(thread, latestInboundBody, tools);
   }
+
+  async draftFollowUp(_thread: Thread): Promise<string> {
+    return "Just checking in — still interested?";
+  }
 }

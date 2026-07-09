@@ -22,9 +22,15 @@ export interface SentEmail {
  * Perception-layer classification, kept for logging/observability — the
  * reasoning loop itself doesn't branch on this, it lets the model reach
  * the right tool calls directly. See application/tools.ts.
+ *
+ * "Silent" is deliberately not a member here: it isn't something you
+ * classify from a message body, it's the absence of one over time. That
+ * signal is handled separately, on elapsed time rather than content —
+ * see useCases/followUpOnSilence.ts.
  */
 export const AgentIntent = {
   INTERESTED: "interested",
+  CURIOUS: "curious",
   OBJECTING: "objecting",
   DECLINING: "declining",
   RESCHEDULING: "rescheduling",

@@ -70,6 +70,27 @@ describe("Thread state machine", () => {
     t.lockSlot(new Date(Date.now() + 3 * 86400_000));
     expect(t.status).toBe(ThreadStatus.SCHEDULED);
   });
+
+  it("closes a quiet thread as NO_RESPONSE from either INITIATED or NEGOTIATING", () => {
+    const t1 = makeThread();
+    t1.closeNoResponse();
+    expect(t1.status).toBe(ThreadStatus.NO_RESPONSE);
+
+    const t2 = makeThread();
+    t2.transitionTo(ThreadStatus.NEGOTIATING);
+    t2.registerNudgeSent();
+    t2.registerNudgeSent();
+    expect(t2.negotiation.nudgeCount).toBe(2);
+    t2.closeNoResponse();
+    expect(t2.status).toBe(ThreadStatus.NO_RESPONSE);
+  });
+
+  it("cannot close as NO_RESPONSE once a call is already scheduled", () => {
+    const t = makeThread();
+    t.transitionTo(ThreadStatus.NEGOTIATING);
+    t.lockSlot(new Date(Date.now() + 86400_000));
+    expect(() => t.closeNoResponse()).toThrow(IllegalTransitionError);
+  });
 });
 
 describe("evaluateOffer", () => {

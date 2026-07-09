@@ -37,3 +37,10 @@ memory:
 
 polling:
   intervalMs: 15000
+
+followUp:
+  # Real-world default: nudge a quiet thread after 3 days, give up after
+  # 2 unanswered nudges (see application/useCases/followUpOnSilence.ts).
+  # Override via POST /check-silence's body for a live demo.
+  thresholdMs: 259200000 # 3 days
+  maxNudges: 2

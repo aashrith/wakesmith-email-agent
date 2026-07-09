@@ -9,6 +9,7 @@ import { parseArgs } from "node:util";
 import { buildContainer } from "../../bootstrap.js";
 import { loadConfig } from "../../config.js";
 import { initiateOutreach } from "../../application/useCases/initiateOutreach.js";
+import { followUpOnSilence } from "../../application/useCases/followUpOnSilence.js";
 import { runPollCycle } from "./pollCycle.js";
 
 async function main() {
@@ -45,6 +46,21 @@ async function main() {
       console.log(JSON.stringify(result, null, 2));
       break;
     }
+    case "check-silence": {
+      // --threshold-ms lets a demo skip waiting out the real 3-day
+      // default (see config/config.yaml's followUp section).
+      const { values } = parseArgs({ args: rest, options: { "threshold-ms": { type: "string" } } });
+      const thresholdMs = values["threshold-ms"] ? Number(values["threshold-ms"]) : container.followUpThresholdMs;
+      const result = await followUpOnSilence({
+        llm: container.llm,
+        email: container.email,
+        memory: container.memory,
+        thresholdMs,
+        maxNudges: container.followUpMaxNudges,
+      });
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
     case "threads": {
       const ids = await container.memory.allThreadIds();
       for (const id of ids) {
@@ -64,7 +80,7 @@ async function main() {
       break;
     }
     default:
-      console.error("Usage: cli <outreach|poll|threads|thread> [...args]");
+      console.error("Usage: cli <outreach|poll|check-silence|threads|thread> [...args]");
       process.exit(1);
   }
 }

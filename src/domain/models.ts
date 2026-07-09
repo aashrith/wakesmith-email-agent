@@ -52,10 +52,11 @@ export interface NegotiationState {
   currentSlot: Date | null;
   rescheduleCount: number;
   counterRounds: number;
+  nudgeCount: number;
 }
 
 export function initialNegotiationState(): NegotiationState {
-  return { currentRate: null, currentSlot: null, rescheduleCount: 0, counterRounds: 0 };
+  return { currentRate: null, currentSlot: null, rescheduleCount: 0, counterRounds: 0, nudgeCount: 0 };
 }
 
 export interface ThreadProps {
@@ -133,5 +134,21 @@ export class Thread {
     this.negotiation.currentSlot = null;
     this.transitionTo(ThreadStatus.RESCHEDULE_REQUESTED, now);
     this.transitionTo(ThreadStatus.NEGOTIATING, now);
+  }
+
+  /** A follow-up nudge was sent because the prospect went quiet. Doesn't
+   * change status — silence isn't a reply we can classify, just an
+   * elapsed-time signal (see followUpOnSilence.ts). */
+  registerNudgeSent(now: Date = new Date()): void {
+    this.negotiation.nudgeCount += 1;
+    this.updatedAt = now;
+  }
+
+  /** Nudges exhausted with no reply. Distinct from declining (an
+   * explicit rejection) or walking away (a budget decision) — this is
+   * the "silent" intent the brief names, closed gracefully and without
+   * sending yet another email into the void. */
+  closeNoResponse(now: Date = new Date()): void {
+    this.transitionTo(ThreadStatus.NO_RESPONSE, now);
   }
 }

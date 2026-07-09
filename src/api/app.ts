@@ -11,6 +11,7 @@ import { node } from "@elysiajs/node";
 import { Elysia, t } from "elysia";
 import { runPollCycle } from "../adapters/inbound/pollCycle.js";
 import { initiateOutreach } from "../application/useCases/initiateOutreach.js";
+import { followUpOnSilence } from "../application/useCases/followUpOnSilence.js";
 import type { Container } from "../bootstrap.js";
 import type { Thread } from "../domain/models.js";
 import { logger } from "../lib/logger.js";
@@ -51,7 +52,7 @@ export function buildApp(container: Container) {
     .get("/threads", async () => {
       const ids = await container.memory.allThreadIds();
       const threads = await Promise.all(ids.map((id) => container.memory.load(id)));
-      return threads.filter((t): t is Thread => t !== null).map(summarize);
+      return threads.filter((th): th is Thread => th !== null).map(summarize);
     })
 
     .get(
@@ -95,7 +96,24 @@ export function buildApp(container: Container) {
       },
     )
 
-    .post("/poll", async () => runPollCycle(container));
+    .post("/poll", async () => runPollCycle(container))
+
+    .post(
+      "/check-silence",
+      async ({ body }) =>
+        followUpOnSilence({
+          llm: container.llm,
+          email: container.email,
+          memory: container.memory,
+          thresholdMs: body?.thresholdMs ?? container.followUpThresholdMs,
+          maxNudges: body?.maxNudges ?? container.followUpMaxNudges,
+        }),
+      {
+        // Overrides let a demo skip waiting out the real threshold —
+        // production calls should omit the body and use config defaults.
+        body: t.Object({ thresholdMs: t.Optional(t.Integer()), maxNudges: t.Optional(t.Integer()) }),
+      },
+    );
 }
 
 export type App = ReturnType<typeof buildApp>;

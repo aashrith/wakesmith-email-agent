@@ -6,6 +6,7 @@
  * queue would be solving a scale problem this project doesn't have.
  */
 
+import { followUpOnSilence } from "../../application/useCases/followUpOnSilence.js";
 import { logger } from "../../lib/logger.js";
 import { runPollCycle } from "./pollCycle.js";
 import type { Container } from "../../bootstrap.js";
@@ -21,6 +22,19 @@ export function startPolling(container: Container): () => void {
       if (result.processed > 0 || result.skipped.length > 0) {
         logger.info("poll cycle complete", { processed: result.processed, skipped: result.skipped });
       }
+
+      // Same cadence as the mail poll — silence detection doesn't need
+      // its own interval, it's just a scan over thread.updatedAt.
+      const silence = await followUpOnSilence({
+        llm: container.llm,
+        email: container.email,
+        memory: container.memory,
+        thresholdMs: container.followUpThresholdMs,
+        maxNudges: container.followUpMaxNudges,
+      });
+      if (silence.nudged.length > 0 || silence.closed.length > 0) {
+        logger.info("silence check complete", { nudged: silence.nudged, closed: silence.closed });
+      }
     } catch (err) {
       // A poll cycle failing (e.g. mailbox unreachable) must not kill the
       // interval — we log and simply try again next tick.
@@ -35,8 +49,9 @@ export function startPolling(container: Container): () => void {
   return () => clearInterval(handle);
 }
 
-// Allows `npm run poll` to run the poller standalone, without the API.
-if (process.argv[1] && process.argv[1].endsWith("poller.ts")) {
+// Allows `pnpm run poll` (tsx, .ts) or the built `dist/poller.js` (vite
+// build, .js) to run the poller standalone, without the API.
+if (process.argv[1] && /poller\.(ts|js)$/.test(process.argv[1])) {
   const { loadConfig } = await import("../../config.js");
   const { buildContainer } = await import("../../bootstrap.js");
   const config = loadConfig(process.env.CONFIG_PATH ?? "config/config.yaml");

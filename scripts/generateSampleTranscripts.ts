@@ -1,8 +1,11 @@
 /**
- * Generates the three sample thread transcripts the brief asks for:
+ * Generates the sample thread transcripts the brief asks for, plus one
+ * more for the "silent" intent it names but doesn't require a transcript
+ * for:
  *  1. a successful negotiation + booking
  *  2. a cancellation + re-booking (the reschedule loop)
  *  3. a graceful walk-away when there's no budget fit
+ *  4. a silent prospect: nudged twice, then closed without a third email
  *
  * These run through the REAL domain, application, and persistence
  * layers (MarkdownMemoryRepository + StubCalendarGateway) — only the
@@ -10,7 +13,9 @@
  * OpenRouter key nor a Docker mailbox is available in this generation
  * environment. The resulting .md files under transcripts/ are exactly
  * what MarkdownMemoryRepository would have written from a real run:
- * same frontmatter, same append-only body.
+ * same frontmatter, same append-only body. Scenario 4 uses
+ * followUpOnSilence's `now` parameter to simulate elapsed days rather
+ * than actually waiting.
  *
  * Each scenario is given a fixed, descriptive thread id (rather than
  * going through initiateOutreach's uuid) purely so the output filename
@@ -21,6 +26,7 @@ import { rmSync } from "node:fs";
 import type { AgentIntent, AgentTurnResult, InboundEmail, SentEmail } from "../src/application/dto.js";
 import type { AgentTools, CalendarGateway, EmailGateway, LLMAgent, SendEmailArgs } from "../src/application/ports.js";
 import { handleInboundMessage } from "../src/application/useCases/handleInboundMessage.js";
+import { followUpOnSilence } from "../src/application/useCases/followUpOnSilence.js";
 import { StubCalendarGateway } from "../src/adapters/outbound/calendarStub.js";
 import { MarkdownMemoryRepository } from "../src/adapters/outbound/memoryMarkdown.js";
 import type { Gig, Prospect } from "../src/domain/models.js";
@@ -63,6 +69,9 @@ class ScriptedLLM implements LLMAgent {
   }
   async handleTurn(thread: Thread, body: string, tools: AgentTools): Promise<AgentTurnResult> {
     return this.handleTurnFn(thread, body, tools);
+  }
+  async draftFollowUp(_thread: Thread): Promise<string> {
+    return "Just wanted to follow up on my note from a few days ago — still interested in chatting about the contract? No pressure either way.";
   }
 }
 
@@ -179,8 +188,35 @@ async function scenario3(memory: MarkdownMemoryRepository, calendar: CalendarGat
   });
 }
 
+async function scenario4(memory: MarkdownMemoryRepository, _calendar: CalendarGateway) {
+  const email = new ScriptedEmailGateway();
+  const llm = new ScriptedLLM(() => {
+    throw new Error("scenario 4's prospect never replies, so handleTurn should never be called");
+  }, "Hi Riley, we have a 4-week backend contract building a billing pipeline. Rate is flexible within reason. Interested in a quick call?");
+
+  const prospect: Prospect = { id: "riley", name: "Riley", email: "riley@example.com" };
+  const threadId = "scenario-4-silent-prospect-follow-up-and-close";
+  await seedOutreach(threadId, prospect, llm, email, memory);
+
+  const seededAt = (await memory.load(threadId))!.updatedAt;
+  const thresholdMs = 3 * 86_400_000; // 3 days, matches config/config.yaml
+  const maxNudges = 2;
+
+  // Riley never replies. Each check simulates time passing via `now`
+  // rather than actually waiting days.
+  await followUpOnSilence({ llm, email, memory, thresholdMs, maxNudges, now: new Date(seededAt.getTime() + 4 * 86_400_000) }); // -> nudge #1
+  await followUpOnSilence({ llm, email, memory, thresholdMs, maxNudges, now: new Date(seededAt.getTime() + 8 * 86_400_000) }); // -> nudge #2
+  await followUpOnSilence({ llm, email, memory, thresholdMs, maxNudges, now: new Date(seededAt.getTime() + 12 * 86_400_000) }); // -> nudges exhausted, close quietly
+}
+
 async function main() {
-  rmSync(CALENDAR_STATE_PATH, { force: true });
+  try {
+    rmSync(CALENDAR_STATE_PATH, { force: true });
+  } catch {
+    // Sandboxed environments occasionally lock this scratch file; leaving
+    // stale holds in place doesn't affect correctness, only which slot
+    // index gets picked, so it's safe to just carry on.
+  }
   const calendar = new StubCalendarGateway(
     Array.from({ length: 10 }, (_, i) => new Date(Date.now() + (i + 1) * 86_400_000)),
     CALENDAR_STATE_PATH,
@@ -190,8 +226,9 @@ async function main() {
   await scenario1(memory, calendar);
   await scenario2(memory, calendar);
   await scenario3(memory, calendar);
+  await scenario4(memory, calendar);
 
-  console.log(`Wrote 3 sample transcripts to ${TRANSCRIPTS_DIR}`);
+  console.log(`Wrote 4 sample transcripts to ${TRANSCRIPTS_DIR}`);
 }
 
 await main();

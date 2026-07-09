@@ -31,6 +31,7 @@ interface FrontMatter {
   currentSlot: string | null;
   rescheduleCount: number;
   counterRounds: number;
+  nudgeCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +99,7 @@ export class MarkdownMemoryRepository implements MemoryRepository {
       currentSlot: thread.negotiation.currentSlot?.toISOString() ?? null,
       rescheduleCount: thread.negotiation.rescheduleCount,
       counterRounds: thread.negotiation.counterRounds,
+      nudgeCount: thread.negotiation.nudgeCount,
       createdAt: thread.createdAt.toISOString(),
       updatedAt: thread.updatedAt.toISOString(),
     };
@@ -157,6 +159,7 @@ export class MarkdownMemoryRepository implements MemoryRepository {
         currentSlot: fm.currentSlot ? new Date(fm.currentSlot) : null,
         rescheduleCount: fm.rescheduleCount,
         counterRounds: fm.counterRounds,
+        nudgeCount: fm.nudgeCount ?? 0, // older thread files predate this field
       },
       messages,
       createdAt: new Date(fm.createdAt),

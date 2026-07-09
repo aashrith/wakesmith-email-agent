@@ -47,6 +47,13 @@ const RawConfigSchema = Type.Object({
   polling: Type.Object({
     intervalMs: Type.Integer({ minimum: 1000 }),
   }),
+  followUp: Type.Object({
+    // How long a waiting thread can go quiet before it gets nudged, and
+    // how many nudges before giving up (NO_RESPONSE) — see
+    // application/useCases/followUpOnSilence.ts.
+    thresholdMs: Type.Integer({ minimum: 1000 }),
+    maxNudges: Type.Integer({ minimum: 0 }),
+  }),
 });
 
 type RawConfig = Static<typeof RawConfigSchema>;
@@ -58,6 +65,7 @@ export interface AppConfig {
   calendar: { availableSlots: Date[] };
   memory: { threadsDir: string; calendarStatePath: string };
   polling: { intervalMs: number };
+  followUp: { thresholdMs: number; maxNudges: number };
 }
 
 export class ConfigError extends Error {}
@@ -95,5 +103,6 @@ export function loadConfig(path: string): AppConfig {
     calendar: { availableSlots: parsedSlots },
     memory: config.memory,
     polling: config.polling,
+    followUp: config.followUp,
   };
 }

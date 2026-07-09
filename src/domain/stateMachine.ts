@@ -12,6 +12,11 @@ export const ThreadStatus = {
   COMPLETED: "completed",
   DECLINED: "declined",
   WALKED_AWAY: "walked_away",
+  // Distinct from WALKED_AWAY (a budget decision) and DECLINED (an
+  // explicit rejection): the prospect simply stopped replying. Reached
+  // only after the follow-up use case has nudged them and given up —
+  // see application/useCases/followUpOnSilence.ts.
+  NO_RESPONSE: "no_response",
 } as const;
 
 export type ThreadStatus = (typeof ThreadStatus)[keyof typeof ThreadStatus];
@@ -20,12 +25,18 @@ export const TERMINAL_STATUSES: ReadonlySet<ThreadStatus> = new Set([
   ThreadStatus.COMPLETED,
   ThreadStatus.DECLINED,
   ThreadStatus.WALKED_AWAY,
+  ThreadStatus.NO_RESPONSE,
 ]);
 
 // Adjacency list of legal transitions. Anything not listed here is illegal.
 const ALLOWED: Readonly<Record<ThreadStatus, ReadonlySet<ThreadStatus>>> = {
-  [ThreadStatus.INITIATED]: new Set([ThreadStatus.NEGOTIATING, ThreadStatus.DECLINED]),
-  [ThreadStatus.NEGOTIATING]: new Set([ThreadStatus.SCHEDULED, ThreadStatus.DECLINED, ThreadStatus.WALKED_AWAY]),
+  [ThreadStatus.INITIATED]: new Set([ThreadStatus.NEGOTIATING, ThreadStatus.DECLINED, ThreadStatus.NO_RESPONSE]),
+  [ThreadStatus.NEGOTIATING]: new Set([
+    ThreadStatus.SCHEDULED,
+    ThreadStatus.DECLINED,
+    ThreadStatus.WALKED_AWAY,
+    ThreadStatus.NO_RESPONSE,
+  ]),
   [ThreadStatus.SCHEDULED]: new Set([
     ThreadStatus.RESCHEDULE_REQUESTED,
     ThreadStatus.COMPLETED,
@@ -39,6 +50,7 @@ const ALLOWED: Readonly<Record<ThreadStatus, ReadonlySet<ThreadStatus>>> = {
   [ThreadStatus.COMPLETED]: new Set(),
   [ThreadStatus.DECLINED]: new Set(),
   [ThreadStatus.WALKED_AWAY]: new Set(),
+  [ThreadStatus.NO_RESPONSE]: new Set(),
 };
 
 export function canTransition(from: ThreadStatus, to: ThreadStatus): boolean {

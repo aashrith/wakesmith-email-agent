@@ -72,4 +72,9 @@ export interface LLMAgent {
   /** Main reasoning loop: model may call tools zero or more times before
    * producing the final reply text. */
   handleTurn(thread: Thread, latestInboundBody: string, tools: AgentTools): Promise<AgentTurnResult>;
+
+  /** A polite check-in when the prospect has gone quiet. No tools —
+   * there's nothing new to negotiate, just a nudge referencing the
+   * existing thread. See useCases/followUpOnSilence.ts. */
+  draftFollowUp(thread: Thread): Promise<string>;
 }

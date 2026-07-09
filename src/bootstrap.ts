@@ -21,6 +21,8 @@ export interface Container {
   calendar: CalendarGateway;
   memory: MemoryRepository;
   pollingIntervalMs: number;
+  followUpThresholdMs: number;
+  followUpMaxNudges: number;
 }
 
 export function buildContainer(config: AppConfig): Container {
@@ -49,5 +51,7 @@ export function buildContainer(config: AppConfig): Container {
     calendar: new StubCalendarGateway(config.calendar.availableSlots, config.memory.calendarStatePath),
     memory: new MarkdownMemoryRepository(join(config.memory.threadsDir), gig),
     pollingIntervalMs: config.polling.intervalMs,
+    followUpThresholdMs: config.followUp.thresholdMs,
+    followUpMaxNudges: config.followUp.maxNudges,
   };
 }
