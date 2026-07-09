@@ -59,6 +59,7 @@ Perception → reasoning → action is a real loop, not a metaphor: the model ca
 - **`setInterval` polling over a job queue.** No distributed workers to coordinate, so BullMQ/cron infra would be solving a scale problem this project doesn't have.
 - **Structured JSON logging over pino/winston.** One process, no log-shipping pipeline to feed yet.
 - **`exactOptionalPropertyTypes` left off.** Kept `strict` + `noUncheckedIndexedAccess`; the exact-optional variant fought config/env plumbing for marginal benefit.
+- **`.dockerignore` matters here, not just for image size.** Missing it initially meant `COPY . .` (which runs after `pnpm install --frozen-lockfile`) copied the host's own `node_modules` — built for the host's OS/arch — straight on top of the container's correctly-installed Linux one. pnpm's automatic pre-run deps check noticed the mismatch and tried to purge + reinstall, which needs an interactive confirmation a container can't give, so the agent exited on start instead of running.
 - **Known harmless test noise.** `pnpm test` prints an `[exact-mirror] TypeCompiler is required to use Union` stack trace to stderr on the `/check-silence` test — an upstream Elysia/TypeBox schema-compiler quirk on `Optional` fields with this dependency combination. It's caught internally and doesn't affect the response or fail the test (all 50 pass); left as-is rather than restructuring a working route schema to silence a third-party log line.
 
 ## API
