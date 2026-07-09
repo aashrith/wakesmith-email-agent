@@ -77,7 +77,6 @@ Full reasoning in the assumptions section below, short version: the brief's memo
 3. **Calendar**: stubbed slot picker (config-driven available times), not live Google Calendar. The assignment explicitly allows this; keeping it stubbed to stay inside the 3–5 day box, with the interface written so a real Calendar API could drop in later.
 4. **Memory store**: per-thread markdown file (YAML state header + append-only episodic body) rather than Postgres/SQLite/Redis/vector DB — see §4 for the full rationale against vector/graph/decay approaches.
 5. **Gig + prospect persona**: I'll invent a plausible sample gig/prospect for the demo unless MarseerAI wants a specific persona used.
-6. **Timeline**: still targeting tomorrow (Thursday), per my earlier reply.
 
 ## 7. Deliverables mapping
 
