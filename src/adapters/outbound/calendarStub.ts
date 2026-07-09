@@ -1,13 +1,22 @@
 /**
  * Stubbed calendar adapter — explicitly not a real Google Calendar
- * integration (see SYSTEM_DESIGN.md §6, assumption 3). Available slots
- * come from config; which ones are held is the one piece of state that
- * spans threads, so it lives in a small JSON file rather than a
- * per-thread markdown file (see SYSTEM_DESIGN.md §4).
+ * integration, just a config-driven slot picker good enough to exercise
+ * the reschedule loop end to end. Available slots come from config;
+ * which ones are held is the one piece of state that spans threads, so
+ * it lives in a small JSON file rather than a per-thread markdown file
+ * (see SYSTEM_DESIGN.md §4).
+ *
+ * Known limitation: holds are keyed by threadId with no expiry, so a
+ * thread whose own record is deleted/lost without going through
+ * cancelSlot() leaves an orphaned hold on its slot forever. Out of scope
+ * to fix properly (would need a TTL or a reconciliation pass against
+ * memory/threads/) for a stubbed adapter, but worth knowing about before
+ * a demo — clear memory/calendar_slots.json to reset.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { SlotUnavailableError } from "../../domain/errors.js";
 import type { CalendarGateway } from "../../application/ports.js";
 
 export class StubCalendarGateway implements CalendarGateway {
@@ -46,7 +55,10 @@ export class StubCalendarGateway implements CalendarGateway {
 
   async hold(slotTime: Date, threadId: string): Promise<void> {
     await this.ensureLoaded();
-    this.held[threadId] = slotTime.toISOString();
+    const iso = slotTime.toISOString();
+    const heldBy = Object.entries(this.held).find(([id, slot]) => slot === iso && id !== threadId);
+    if (heldBy) throw new SlotUnavailableError(iso);
+    this.held[threadId] = iso;
     await this.persist();
   }
 

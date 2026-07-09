@@ -48,4 +48,4 @@ const info = await transporter.sendMail({
 });
 
 console.log(`Sent as ${values.from} -> ${values.to}: "${values.body}" (${info.messageId})`);
-console.log("Now run: npm run cli -- poll");
+console.log("Now run: pnpm poll");

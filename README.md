@@ -65,7 +65,8 @@ Perception → reasoning → action is a real loop, not a metaphor: the model ca
 - **`-Dgreenmail.users.login=email` isn't cosmetic.** GreenMail's default (`-Dgreenmail.users.login=local_part`) only accepts the local part (`agent`) as an IMAP/SMTP login when users are configured as `login:pwd@domain`, not the full address (`agent@wakesmith.test`) this project uses as the username everywhere else. Without the flag, every poll cycle failed with imapflow's generic `Error('Command failed')` — confirmed against GreenMail's own documented CLI options, not guessed from the error alone.
 - **No `--` with pnpm.** `pnpm cli -- outreach ...` (the npm-era convention for "everything after this is the script's, not the package manager's") doesn't do what it looks like under pnpm — pnpm forwards `--` through literally as an argv token instead of stripping it, so `cli.ts`'s `const [command, ...rest] = process.argv.slice(2)` saw `command === "--"` and always hit the usage/error branch. Every CLI example in this README used to include it; none of them had actually been run end-to-end until they were. Fixed by dropping the `--` everywhere — `pnpm cli outreach --id p-1 ...` forwards flags to the script just fine without it.
 - **`.env` loading for the no-Docker path.** Nothing loaded `.env` into `process.env` outside of Docker Compose's `environment:` block, so `pnpm cli`/`pnpm dev` run directly on the host failed with `Missing required environment variable: OPENROUTER_API_KEY` even with a correctly filled-in `.env` file. Fixed with Node's built-in `--env-file-if-exists=.env` flag on the relevant scripts rather than adding a `dotenv` dependency. Inside Docker, the Dockerfile `touch`es an empty `.env` placeholder (the real one stays excluded via `.dockerignore`) purely so the flag finds a file and stays quiet instead of logging ".env not found" on every start — the container's actual secrets still come entirely from `docker-compose.yml`'s `environment:` block.
-- **Known harmless test noise.** `pnpm test` prints an `[exact-mirror] TypeCompiler is required to use Union` stack trace to stderr on the `/check-silence` test — an upstream Elysia/TypeBox schema-compiler quirk on `Optional` fields with this dependency combination. It's caught internally and doesn't affect the response or fail the test (all 50 pass); left as-is rather than restructuring a working route schema to silence a third-party log line.
+- **Known harmless test noise.** `pnpm test` prints an `[exact-mirror] TypeCompiler is required to use Union` stack trace to stderr on the `/check-silence` test — an upstream Elysia/TypeBox schema-compiler quirk on `Optional` fields with this dependency combination. It's caught internally and doesn't affect the response or fail the test (all 52 pass); left as-is rather than restructuring a working route schema to silence a third-party log line.
+- **Calendar holds have no expiry, so orphaned holds are possible.** `StubCalendarGateway` keys holds by `threadId` in `memory/calendar_slots.json`, shared across every thread. If a thread's own record is ever deleted without going through `cancel_slot` (e.g. manually clearing test data), its hold on a slot is never released — a later, unrelated thread can be offered that slot by `propose_slots`, then told it's unavailable if the prospect picks it in the window before a `book_slot` re-check. Caught this during manual demo testing, not designed for upfront: added a same-slot collision check in `hold()` (`SlotUnavailableError`, surfaced through `book_slot` as `{ ok: false, error }` instead of silently double-booking) plus `pnpm reset-demo`, which clears `memory/threads/*.md` and `memory/calendar_slots.json` so a demo/recording starts from a clean slate. A real fix (hold TTL or reconciliation against `memory/threads/`) is out of scope for a stubbed adapter.
 
 ## API
 
@@ -86,7 +87,7 @@ All request bodies are validated with TypeBox (via Elysia's `t`); a schema misma
 pnpm typecheck   # tsc --noEmit, strict
 pnpm lint        # eslint, flat config — 0 errors, 0 warnings
 pnpm build       # vite build — bundles cleanly to dist/ (CI-style check, not the runtime path)
-pnpm test        # 50 tests: domain, application (fakes), adapters, persistence round-trip, API, retry
+pnpm test        # 52 tests: domain, application (fakes), adapters, persistence round-trip, API, retry
 pnpm test:coverage
 pnpm transcripts # regenerates transcripts/*.md from the real domain+application+persistence layers
 ```
@@ -106,6 +107,7 @@ The steps above prove the logic; this proves the real round-trip the brief asks 
 
 ```bash
 cp .env.example .env && # fill in OPENROUTER_API_KEY
+pnpm reset-demo             # optional — clears memory/ for a clean slate (see Trade-offs)
 docker compose up --build   # wait for both mailserver and agent to report healthy
 
 # 1. Seed a prospect

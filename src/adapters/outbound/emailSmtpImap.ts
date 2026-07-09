@@ -1,9 +1,9 @@
 /**
  * Real SMTP/IMAP adapter — nodemailer for sending, imapflow + mailparser
  * for reading. Points at a Docker-hosted GreenMail/smtp4dev mailbox for
- * the demo (see SYSTEM_DESIGN.md §6, assumption 2) but works unmodified
- * against any real IMAP/SMTP mailbox, since it speaks the actual
- * protocols rather than a provider-specific API.
+ * the demo but works unmodified against any real IMAP/SMTP mailbox,
+ * since it speaks the actual protocols rather than a provider-specific
+ * API.
  */
 
 import { randomUUID } from "node:crypto";

@@ -19,7 +19,8 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "transcripts": "tsx scripts/generateSampleTranscripts.ts",
-    "simulate-reply": "tsx scripts/simulateProspectReply.ts"
+    "simulate-reply": "tsx scripts/simulateProspectReply.ts",
+    "reset-demo": "tsx scripts/resetDemo.ts"
   },
   "dependencies": {
     "@elysiajs/node": "^1.1.1",

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { StubCalendarGateway } from "../src/adapters/outbound/calendarStub.js";
 import { parseToolArgs, ToolArgumentError } from "../src/adapters/outbound/toolSchemas.js";
+import { SlotUnavailableError } from "../src/domain/errors.js";
 
 describe("StubCalendarGateway", () => {
   let dir: string;
@@ -43,6 +44,20 @@ describe("StubCalendarGateway", () => {
     await cal.release("thread-1");
     const available = await cal.listAvailableSlots(4);
     expect(available.some((s) => s.getTime() === first!.getTime())).toBe(true);
+  });
+
+  it("rejects a hold on a slot another thread already holds (TOCTOU guard)", async () => {
+    const cal = new StubCalendarGateway(slots, statePath);
+    const [first] = await cal.listAvailableSlots(1);
+    await cal.hold(first!, "thread-1");
+    await expect(cal.hold(first!, "thread-2")).rejects.toThrow(SlotUnavailableError);
+  });
+
+  it("lets the same thread re-hold (idempotent) the slot it already owns", async () => {
+    const cal = new StubCalendarGateway(slots, statePath);
+    const [first] = await cal.listAvailableSlots(1);
+    await cal.hold(first!, "thread-1");
+    await expect(cal.hold(first!, "thread-1")).resolves.toBeUndefined();
   });
 });
 

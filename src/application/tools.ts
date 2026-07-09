@@ -10,7 +10,7 @@
  * SYSTEM_DESIGN.md.
  */
 
-import { IllegalTransitionError } from "../domain/errors.js";
+import { IllegalTransitionError, SlotUnavailableError } from "../domain/errors.js";
 import type { Thread } from "../domain/models.js";
 import { evaluateOffer, OfferDecision } from "../domain/policies.js";
 import { ThreadStatus } from "../domain/stateMachine.js";
@@ -57,7 +57,9 @@ export class AgentTools implements AgentToolsPort {
       await this.calendar.hold(slotTime, this.thread.id);
       this.thread.lockSlot(slotTime);
     } catch (err) {
-      if (err instanceof IllegalTransitionError) return { ok: false, error: err.message };
+      if (err instanceof IllegalTransitionError || err instanceof SlotUnavailableError) {
+        return { ok: false, error: err.message };
+      }
       throw err;
     }
     return { ok: true, slot: slotIso };

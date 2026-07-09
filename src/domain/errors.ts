@@ -23,3 +23,18 @@ export class BudgetViolationError extends Error {
     this.ceiling = ceiling;
   }
 }
+
+/** Thrown when a calendar hold is requested for a slot another thread
+ * already holds — see adapters/outbound/calendarStub.ts. A TOCTOU gap
+ * always exists between propose_slots (read) and book_slot (write); this
+ * turns a would-be silent double-booking into a catchable error instead
+ * of two threads believing they both own the same time. */
+export class SlotUnavailableError extends Error {
+  readonly slotIso: string;
+
+  constructor(slotIso: string) {
+    super(`Slot ${slotIso} is already held by another thread`);
+    this.name = "SlotUnavailableError";
+    this.slotIso = slotIso;
+  }
+}

@@ -1,8 +1,7 @@
 /**
  * OpenRouter adapter — plain `fetch` against OpenRouter's OpenAI-compatible
  * chat-completions endpoint, so the model behind the agent loop is a
- * config value (see SYSTEM_DESIGN.md §6, assumption 1), not a hardcoded
- * SDK integration.
+ * config value, not a hardcoded SDK integration.
  *
  * This is where "perception → reasoning → action" actually happens as a
  * loop: the model calls a tool, we execute it against AgentTools (which
