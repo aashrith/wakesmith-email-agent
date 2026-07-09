@@ -64,22 +64,8 @@ A thin `calendar_slots.json` (or one SQLite table, if a real query becomes usefu
 
 ### Why file-based over vector/graph/decay
 
-Full reasoning in the assumptions section below, short version: the brief's memory problem is small and bounded (one thread per prospect, a few dozen turns max) and demands *completeness* ("never contradict a prior commitment"), not large-corpus *retrieval*. Vector search trades in probabilistic recall — wrong tool when a missed commitment is a correctness bug, not a UX nit. A graph DB and decay/TTL solve for unbounded, evolving, multi-entity corpora and time-based forgetting — none of which exist here, and decay is actively counter to "an agreed rate from two weeks ago is still binding." File-based (Claude Code/Codex CLI's own pattern) plus one mutable state header gives full-fidelity recall for free and eliminates stale-pollution without needing decay, at zero infra cost.
+Short version: the brief's memory problem is small and bounded (one thread per prospect, a few dozen turns max) and demands *completeness* ("never contradict a prior commitment"), not large-corpus *retrieval*. Vector search trades in probabilistic recall — wrong tool when a missed commitment is a correctness bug, not a UX nit. A graph DB and decay/TTL solve for unbounded, evolving, multi-entity corpora and time-based forgetting — none of which exist here, and decay is actively counter to "an agreed rate from two weeks ago is still binding." File-based (Claude Code/Codex CLI's own pattern) plus one mutable state header gives full-fidelity recall for free and eliminates stale-pollution without needing decay, at zero infra cost.
 
 ## 5. Config-driven (not hard-coded)
 
 `config.yaml`: gig description, tone, budget ceiling (min/max rate), available calendar slots, polling interval. Swapping gigs or budgets means editing config, not code.
-
-## 6. Assumptions (to confirm with MarseerAI before/while building)
-
-1. **LLM**: OpenRouter, using the OpenAI-compatible chat-completions schema (tools/function-calling included), so the model behind the agent loop is a config value, not a hardcoded provider integration.
-2. **Email transport**: a self-hosted Docker mail container (GreenMail — real SMTP + IMAP, unlike Mailpit which lacks IMAP) hosting two mailboxes on the `wakesmith.test` domain: `agent@` (the agent's own inbox) and `prospect@` (stands in for the prospect's, used by `pnpm simulate-reply`). Real protocol send/receive, fully reproducible via `docker compose up` — no external credentials needed to re-run the demo. GreenMail defaults to local-part-only login for `logon:pwd@domain`-style users, so `docker-compose.yml` sets `-Dgreenmail.users.login=email` to accept the full addresses used everywhere else in config.
-3. **Calendar**: stubbed slot picker (config-driven available times), not live Google Calendar. The assignment explicitly allows this; keeping it stubbed to stay inside the 3–5 day box, with the interface written so a real Calendar API could drop in later.
-4. **Memory store**: per-thread markdown file (YAML state header + append-only episodic body) rather than Postgres/SQLite/Redis/vector DB — see §4 for the full rationale against vector/graph/decay approaches.
-5. **Gig + prospect persona**: I'll invent a plausible sample gig/prospect for the demo unless MarseerAI wants a specific persona used.
-
-## 7. Deliverables mapping
-
-- GitHub repo + README (setup, architecture diagram, trade-offs) — this doc becomes the README's design section.
-- Loom (3–5 min): live demo walking the reschedule loop specifically.
-- Sample transcripts: (a) successful negotiation + booking, (b) cancellation + re-booking, (c) graceful walk-away when no fit, plus (d) a silent prospect nudged twice then closed — not a required transcript, but "silent" is one of the five intents the brief names, so it gets the same real-code proof as the other three.
