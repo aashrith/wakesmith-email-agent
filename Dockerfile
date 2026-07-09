@@ -22,6 +22,13 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# .env is deliberately excluded from the image (.dockerignore) — real
+# secrets come from docker-compose.yml's environment: block instead.
+# An empty placeholder here just gives --env-file-if-exists a file to
+# find so it stays quiet, rather than logging ".env not found" on
+# every start; it's still empty, so it contributes nothing itself.
+RUN touch .env
+
 EXPOSE 3000
 
 CMD ["pnpm", "start"]
