@@ -18,16 +18,18 @@ The agent's API comes up on `:3000`; the background poller starts alongside it a
 
 For local dev without Docker: run `docker compose up mailserver` for just the mailbox, point `config/config.yaml`'s `email.smtpHost`/`imapHost` at `localhost`, then `pnpm dev` — `dev`/`start`/`poll`/`cli` all load `.env` automatically via Node's `--env-file-if-exists` (silently skipped if absent, e.g. inside Docker, where `docker-compose.yml`'s `environment:` block provides the same variables instead).
 
-Seed a prospect and drive the demo via CLI:
+Seed a prospect and drive the demo via CLI. Since `config/config.yaml` points `smtpHost`/`imapHost` at `mailserver` — a hostname that only resolves *inside* Docker's network — run the CLI inside the already-running `agent` container rather than bare on the host:
 
 ```bash
-pnpm cli outreach --id p-1 --name Sam --email sam@wakesmith.test
+docker compose exec agent pnpm cli outreach --id p-1 --name Sam --email sam@wakesmith.test
 # simulate the prospect replying via GreenMail's prospect@wakesmith.test mailbox, then:
-pnpm cli poll
-pnpm cli threads
-pnpm cli thread <id>
-pnpm cli check-silence --threshold-ms 0   # force-nudge a quiet thread for a demo
+docker compose exec agent pnpm cli poll
+docker compose exec agent pnpm cli threads
+docker compose exec agent pnpm cli thread <id>
+docker compose exec agent pnpm cli check-silence --threshold-ms 0   # force-nudge a quiet thread for a demo
 ```
+
+(Running the local-dev-without-Docker setup above instead? Drop `docker compose exec agent` and use bare `pnpm cli ...` — that's the mode it's for.)
 
 ## Architecture
 
@@ -100,31 +102,36 @@ These four are generated with a scripted LLM and mail transport (no OpenRouter k
 
 ## Live demo runbook
 
-The steps above prove the logic; this proves the real round-trip the brief asks for, against a real OpenRouter model and a real (Dockerized) SMTP/IMAP mailbox.
+The steps above prove the logic; this proves the real round-trip the brief asks for, against a real OpenRouter model and a real (Dockerized) SMTP/IMAP mailbox. Run against the full `docker compose up --build` stack — it's what a reviewer would actually run themselves, so it's the strongest proof the repo works as shipped. CLI commands go through `docker compose exec agent` for the same reason as above (`mailserver` only resolves inside Docker's network); `pnpm simulate-reply` is the exception — it defaults to `localhost` and GreenMail's ports are published to the host, so it runs directly, full stack or not.
 
 ```bash
 cp .env.example .env && # fill in OPENROUTER_API_KEY
 docker compose up --build   # wait for both mailserver and agent to report healthy
 
 # 1. Seed a prospect
-pnpm cli outreach --id p-1 --name Sam --email prospect@wakesmith.test
+docker compose exec agent pnpm cli outreach --id p-1 --name Sam --email prospect@wakesmith.test
 
 # 2. Reply as the prospect (real SMTP into GreenMail's prospect mailbox)
 pnpm simulate-reply --to agent@wakesmith.test --body "Interested! My rate is \$85/hr, does that work?"
 
-# 3. Have the agent poll and react — this is the real OpenRouter tool-calling loop
-pnpm cli poll
-pnpm cli threads      # should show status "scheduled"
+# 3. Have the agent poll and react — this is the real OpenRouter tool-calling loop.
+# The background poller already runs every 15s inside the container, so this
+# step is optional (wait it out for a "the agent did this on its own" beat on
+# camera) — or force it immediately for tighter pacing:
+docker compose exec agent pnpm cli poll
+docker compose exec agent pnpm cli threads      # should show status "scheduled"
 
 # 4. Trigger the reschedule loop
 pnpm simulate-reply --to agent@wakesmith.test --body "Something came up — can we push the call?"
-pnpm cli poll
-pnpm cli threads      # still "scheduled", but on a new slot; rescheduleCount incremented
+docker compose exec agent pnpm cli poll
+docker compose exec agent pnpm cli threads      # still "scheduled", but on a new slot; rescheduleCount incremented
 
 # 5. Silent prospect: skip step 2/4 for a second seeded thread, then
-pnpm cli check-silence --threshold-ms 0
+docker compose exec agent pnpm cli check-silence --threshold-ms 0
 ```
 
 `pnpm simulate-reply` (see `scripts/simulateProspectReply.ts`) sends real SMTP mail from GreenMail's `prospect@wakesmith.test` account into the agent's inbox — it's the human side of the round-trip, standing in for an actual prospect's email client.
+
+Recording tip: replies come from a real model, so they're not deterministic — do one dry run off-camera to see roughly what the agent says before narrating over a live take.
 
 Loom walkthrough: _add link before submitting, recorded from a run of the runbook above_.
