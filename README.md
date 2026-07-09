@@ -16,17 +16,17 @@ docker compose up --build   # starts GreenMail (real SMTP+IMAP test mailbox) + t
 
 The agent's API comes up on `:3000`; the background poller starts alongside it automatically.
 
-For local dev without Docker: run `docker compose up mailserver` for just the mailbox, point `config/config.yaml`'s `email.smtpHost`/`imapHost` at `localhost`, then `pnpm dev`.
+For local dev without Docker: run `docker compose up mailserver` for just the mailbox, point `config/config.yaml`'s `email.smtpHost`/`imapHost` at `localhost`, then `pnpm dev` — `dev`/`start`/`poll`/`cli` all load `.env` automatically via Node's `--env-file-if-exists` (silently skipped if absent, e.g. inside Docker, where `docker-compose.yml`'s `environment:` block provides the same variables instead).
 
 Seed a prospect and drive the demo via CLI:
 
 ```bash
-pnpm cli -- outreach --id p-1 --name Sam --email sam@wakesmith.test
+pnpm cli outreach --id p-1 --name Sam --email sam@wakesmith.test
 # simulate the prospect replying via GreenMail's prospect@wakesmith.test mailbox, then:
-pnpm cli -- poll
-pnpm cli -- threads
-pnpm cli -- thread <id>
-pnpm cli -- check-silence --threshold-ms 0   # force-nudge a quiet thread for a demo
+pnpm cli poll
+pnpm cli threads
+pnpm cli thread <id>
+pnpm cli check-silence --threshold-ms 0   # force-nudge a quiet thread for a demo
 ```
 
 ## Architecture
@@ -61,6 +61,8 @@ Perception → reasoning → action is a real loop, not a metaphor: the model ca
 - **`exactOptionalPropertyTypes` left off.** Kept `strict` + `noUncheckedIndexedAccess`; the exact-optional variant fought config/env plumbing for marginal benefit.
 - **`.dockerignore` matters here, not just for image size.** Missing it initially meant `COPY . .` (which runs after `pnpm install --frozen-lockfile`) copied the host's own `node_modules` — built for the host's OS/arch — straight on top of the container's correctly-installed Linux one. pnpm's automatic pre-run deps check noticed the mismatch and tried to purge + reinstall, which needs an interactive confirmation a container can't give, so the agent exited on start instead of running.
 - **`-Dgreenmail.users.login=email` isn't cosmetic.** GreenMail's default (`-Dgreenmail.users.login=local_part`) only accepts the local part (`agent`) as an IMAP/SMTP login when users are configured as `login:pwd@domain`, not the full address (`agent@wakesmith.test`) this project uses as the username everywhere else. Without the flag, every poll cycle failed with imapflow's generic `Error('Command failed')` — confirmed against GreenMail's own documented CLI options, not guessed from the error alone.
+- **No `--` with pnpm.** `pnpm cli -- outreach ...` (the npm-era convention for "everything after this is the script's, not the package manager's") doesn't do what it looks like under pnpm — pnpm forwards `--` through literally as an argv token instead of stripping it, so `cli.ts`'s `const [command, ...rest] = process.argv.slice(2)` saw `command === "--"` and always hit the usage/error branch. Every CLI example in this README used to include it; none of them had actually been run end-to-end until they were. Fixed by dropping the `--` everywhere — `pnpm cli outreach --id p-1 ...` forwards flags to the script just fine without it.
+- **`.env` loading for the no-Docker path.** Nothing loaded `.env` into `process.env` outside of Docker Compose's `environment:` block, so `pnpm cli`/`pnpm dev` run directly on the host failed with `Missing required environment variable: OPENROUTER_API_KEY` even with a correctly filled-in `.env` file. Fixed with Node's built-in `--env-file-if-exists=.env` flag on the relevant scripts rather than adding a `dotenv` dependency — it's a no-op (not an error) when the file is absent, which is exactly the Docker case.
 - **Known harmless test noise.** `pnpm test` prints an `[exact-mirror] TypeCompiler is required to use Union` stack trace to stderr on the `/check-silence` test — an upstream Elysia/TypeBox schema-compiler quirk on `Optional` fields with this dependency combination. It's caught internally and doesn't affect the response or fail the test (all 50 pass); left as-is rather than restructuring a working route schema to silence a third-party log line.
 
 ## API
@@ -105,22 +107,22 @@ cp .env.example .env && # fill in OPENROUTER_API_KEY
 docker compose up --build   # wait for both mailserver and agent to report healthy
 
 # 1. Seed a prospect
-pnpm cli -- outreach --id p-1 --name Sam --email prospect@wakesmith.test
+pnpm cli outreach --id p-1 --name Sam --email prospect@wakesmith.test
 
 # 2. Reply as the prospect (real SMTP into GreenMail's prospect mailbox)
-pnpm simulate-reply -- --to agent@wakesmith.test --body "Interested! My rate is \$85/hr, does that work?"
+pnpm simulate-reply --to agent@wakesmith.test --body "Interested! My rate is \$85/hr, does that work?"
 
 # 3. Have the agent poll and react — this is the real OpenRouter tool-calling loop
-pnpm cli -- poll
-pnpm cli -- threads      # should show status "scheduled"
+pnpm cli poll
+pnpm cli threads      # should show status "scheduled"
 
 # 4. Trigger the reschedule loop
-pnpm simulate-reply -- --to agent@wakesmith.test --body "Something came up — can we push the call?"
-pnpm cli -- poll
-pnpm cli -- threads      # still "scheduled", but on a new slot; rescheduleCount incremented
+pnpm simulate-reply --to agent@wakesmith.test --body "Something came up — can we push the call?"
+pnpm cli poll
+pnpm cli threads      # still "scheduled", but on a new slot; rescheduleCount incremented
 
 # 5. Silent prospect: skip step 2/4 for a second seeded thread, then
-pnpm cli -- check-silence --threshold-ms 0
+pnpm cli check-silence --threshold-ms 0
 ```
 
 `pnpm simulate-reply` (see `scripts/simulateProspectReply.ts`) sends real SMTP mail from GreenMail's `prospect@wakesmith.test` account into the agent's inbox — it's the human side of the round-trip, standing in for an actual prospect's email client.

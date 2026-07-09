@@ -8,10 +8,10 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "tsx watch src/api/server.ts",
-    "start": "tsx src/api/server.ts",
-    "poll": "tsx src/adapters/inbound/poller.ts",
-    "cli": "tsx src/adapters/inbound/cli.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/api/server.ts",
+    "start": "tsx --env-file-if-exists=.env src/api/server.ts",
+    "poll": "tsx --env-file-if-exists=.env src/adapters/inbound/poller.ts",
+    "cli": "tsx --env-file-if-exists=.env src/adapters/inbound/cli.ts",
     "build": "vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
