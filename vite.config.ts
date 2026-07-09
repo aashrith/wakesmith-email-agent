@@ -21,7 +21,7 @@ const runtimeDeps = [
 
 export default defineConfig({
   build: {
-    target: "node20",
+    target: "node24",
     ssr: true,
     outDir: "dist",
     emptyOutDir: true,
