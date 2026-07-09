@@ -131,7 +131,3 @@ docker compose exec agent pnpm cli check-silence --threshold-ms 0
 ```
 
 `pnpm simulate-reply` (see `scripts/simulateProspectReply.ts`) sends real SMTP mail from GreenMail's `prospect@wakesmith.test` account into the agent's inbox — it's the human side of the round-trip, standing in for an actual prospect's email client.
-
-Recording tip: replies come from a real model, so they're not deterministic — do one dry run off-camera to see roughly what the agent says before narrating over a live take.
-
-Loom walkthrough: _add link before submitting, recorded from a run of the runbook above_.
