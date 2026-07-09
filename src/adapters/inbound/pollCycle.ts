@@ -7,7 +7,7 @@
  */
 
 import { handleInboundMessage, ThreadNotFoundError } from "../../application/useCases/handleInboundMessage.js";
-import { logger } from "../../lib/logger.js";
+import { describeError, logger } from "../../lib/logger.js";
 import type { Container } from "../../bootstrap.js";
 
 export interface PollResult {
@@ -34,8 +34,8 @@ export async function runPollCycle(container: Container): Promise<PollResult> {
       // A stray reply from someone we never pitched is a normal, expected
       // case (wrong address, spam, etc.) — log and move on rather than
       // taking down the whole poll cycle over one bad message.
-      const reason = err instanceof ThreadNotFoundError ? err.message : String(err);
-      logger.warn("skipped inbound message", { from: inbound.fromAddress, reason });
+      const reason = err instanceof ThreadNotFoundError ? err.message : String(describeError(err).error);
+      logger.warn("skipped inbound message", { from: inbound.fromAddress, reason, ...describeError(err) });
       result.skipped.push({ from: inbound.fromAddress, reason });
     }
   }

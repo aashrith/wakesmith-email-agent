@@ -7,7 +7,7 @@
  */
 
 import { followUpOnSilence } from "../../application/useCases/followUpOnSilence.js";
-import { logger } from "../../lib/logger.js";
+import { describeError, logger } from "../../lib/logger.js";
 import { runPollCycle } from "./pollCycle.js";
 import type { Container } from "../../bootstrap.js";
 
@@ -38,7 +38,7 @@ export function startPolling(container: Container): () => void {
     } catch (err) {
       // A poll cycle failing (e.g. mailbox unreachable) must not kill the
       // interval — we log and simply try again next tick.
-      logger.error("poll cycle failed", { error: String(err) });
+      logger.error("poll cycle failed", describeError(err));
     } finally {
       inFlight = false;
     }

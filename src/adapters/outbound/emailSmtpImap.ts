@@ -12,7 +12,7 @@ import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import type { EmailGateway, SendEmailArgs } from "../../application/ports.js";
 import type { InboundEmail, SentEmail } from "../../application/dto.js";
-import { logger } from "../../lib/logger.js";
+import { describeError, logger } from "../../lib/logger.js";
 import { isTransientNetworkError, withRetry } from "../../lib/retry.js";
 
 export interface EmailConfig {
@@ -58,7 +58,7 @@ export class SmtpImapEmailGateway implements EmailGateway {
         retries: 2,
         isRetryable: (err) => {
           const retryable = isTransientNetworkError(err);
-          if (retryable) logger.warn("smtp send failed, retrying", { to: toAddress, error: String(err) });
+          if (retryable) logger.warn("smtp send failed, retrying", { to: toAddress, ...describeError(err) });
           return retryable;
         },
       },
@@ -81,7 +81,7 @@ export class SmtpImapEmailGateway implements EmailGateway {
       retries: 2,
       isRetryable: (err) => {
         const retryable = isTransientNetworkError(err);
-        if (retryable) logger.warn("imap connect failed, retrying", { error: String(err) });
+        if (retryable) logger.warn("imap connect failed, retrying", describeError(err));
         return retryable;
       },
     });
