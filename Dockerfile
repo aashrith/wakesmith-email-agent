@@ -3,7 +3,7 @@
 # service — a real production deploy would add a build stage. `pnpm
 # build` (vite) exists as a CI-style bundling check (see README) but
 # isn't what this container runs.
-FROM node:20-slim
+FROM node:24-slim
 
 WORKDIR /app
 

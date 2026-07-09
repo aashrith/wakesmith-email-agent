@@ -6,7 +6,7 @@ Full design rationale lives in [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) and [`ar
 
 ## Setup
 
-Requires Node ≥20, pnpm (`corepack enable` if you don't have it), and Docker.
+Requires Node ≥24 (LTS), pnpm (`corepack enable` if you don't have it), and Docker.
 
 ```bash
 cp .env.example .env        # add your OPENROUTER_API_KEY
@@ -53,6 +53,7 @@ Perception → reasoning → action is a real loop, not a metaphor: the model ca
 
 - **tsx at runtime, Vite as a hygiene gate, not a rewrite.** The container still runs TypeScript directly via `tsx` (right call at this scale — one process, one mailbox). `pnpm build` (Vite, Node/SSR target, `node_modules` kept external) exists purely as a second, independent check that the source graph actually resolves and bundles — `tsc --noEmit` catches type errors, this catches bundling/circular-import issues tsc alone can miss. `dist/` is a CI artifact; it's not what `docker compose` runs.
 - **pnpm over npm.** Content-addressable store and a stricter `node_modules` layout (no phantom access to undeclared transitive deps) for negligible extra setup cost.
+- **Node ≥24 (LTS), not ≥20.** Current pnpm (11.x, pinned via `packageManager`) requires Node ≥22.13 — it uses the `node:sqlite` built-in internally for its store index. Rather than pin pnpm back to the 10.x line to keep an older Node floor, the project's Node requirement moved up to 24 (current LTS) across `package.json` engines, the Dockerfile base image, and this README. Caught this by actually running `docker compose up --build` against `node:20-slim`, which failed with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` — not something `pnpm install` on the host surfaces, since a host machine's own Node is usually newer than the container's pinned base image.
 - **ESLint, type-aware rules off.** `typescript-eslint`'s `recommended` (not `recommended-type-checked`) — `tsc --noEmit` already owns type correctness; ESLint's job here is dead code and footguns (unused vars, shadowing — the exact bug class caught by hand once in `llmOpenRouter.ts` before this was automated).
 - **Markdown memory over a database.** Trivial to inspect and git-diff; the cost is O(n) prospect lookup (scans thread files) — fine at dozens of threads, would need an index at thousands.
 - **`setInterval` polling over a job queue.** No distributed workers to coordinate, so BullMQ/cron infra would be solving a scale problem this project doesn't have.
