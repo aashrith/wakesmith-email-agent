@@ -11,7 +11,11 @@ gig:
   tone: warm, concise, non-salesy
 
 llm:
-  model: anthropic/claude-3.5-sonnet
+  # Model slugs on OpenRouter drift over time as providers retire old
+  # endpoints — claude-3.5-sonnet returned 404 ("No endpoints found")
+  # by mid-2026 despite still being a listed model. If this ever 404s
+  # again, check https://openrouter.ai/anthropic for a current slug.
+  model: anthropic/claude-sonnet-4.6
   # baseUrl: https://openrouter.ai/api/v1   # override if needed
 
 email:
