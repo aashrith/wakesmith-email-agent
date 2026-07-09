@@ -6,34 +6,35 @@ Full design rationale lives in [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) and [`ar
 
 ## Setup
 
-Requires Node ≥20 and Docker.
+Requires Node ≥20, pnpm (`corepack enable` if you don't have it), and Docker.
 
 ```bash
 cp .env.example .env        # add your OPENROUTER_API_KEY
-npm install
+pnpm install
 docker compose up --build   # starts GreenMail (real SMTP+IMAP test mailbox) + the agent
 ```
 
 The agent's API comes up on `:3000`; the background poller starts alongside it automatically.
 
-For local dev without Docker: run `docker compose up mailserver` for just the mailbox, point `config/config.yaml`'s `email.smtpHost`/`imapHost` at `localhost`, then `npm run dev`.
+For local dev without Docker: run `docker compose up mailserver` for just the mailbox, point `config/config.yaml`'s `email.smtpHost`/`imapHost` at `localhost`, then `pnpm dev`.
 
 Seed a prospect and drive the demo via CLI:
 
 ```bash
-npm run cli -- outreach --id p-1 --name Sam --email sam@wakesmith.test
+pnpm cli -- outreach --id p-1 --name Sam --email sam@wakesmith.test
 # simulate the prospect replying via GreenMail's prospect@wakesmith.test mailbox, then:
-npm run cli -- poll
-npm run cli -- threads
-npm run cli -- thread <id>
+pnpm cli -- poll
+pnpm cli -- threads
+pnpm cli -- thread <id>
+pnpm cli -- check-silence --threshold-ms 0   # force-nudge a quiet thread for a demo
 ```
 
 ## Architecture
 
 Hexagonal / DDD, four layers:
 
-- **`src/domain`** — pure business logic, zero IO. `Thread` aggregate owns its own state machine (`initiated → negotiating → scheduled ⇄ reschedule_requested → completed / declined / walked_away`); `policies.ts` is the deterministic accept/counter/walk-away decision the brief's budget rule requires.
-- **`src/application`** — use cases (`initiateOutreach`, `handleInboundMessage`) and the ports they depend on (`EmailGateway`, `CalendarGateway`, `MemoryRepository`, `LLMAgent`), all as TypeScript interfaces. `tools.ts` is the LLM's toolbelt — it mutates the in-memory `Thread` via its guarded methods only; nothing external happens until the use case sends the resulting email.
+- **`src/domain`** — pure business logic, zero IO. `Thread` aggregate owns its own state machine (`initiated → negotiating → scheduled ⇄ reschedule_requested → completed / declined / walked_away / no_response`); `policies.ts` is the deterministic accept/counter/walk-away decision the brief's budget rule requires.
+- **`src/application`** — use cases (`initiateOutreach`, `handleInboundMessage`, `followUpOnSilence`) and the ports they depend on (`EmailGateway`, `CalendarGateway`, `MemoryRepository`, `LLMAgent`), all as TypeScript interfaces. `tools.ts` is the LLM's toolbelt — it mutates the in-memory `Thread` via its guarded methods only; nothing external happens until the use case sends the resulting email. `followUpOnSilence` handles the "silent" intent the brief names — triggered by elapsed time on `Thread.updatedAt`, not message content, since silence isn't something you classify from a reply.
 - **`src/adapters`** — outbound: OpenRouter (chat-completions + tool calling), SMTP/IMAP (nodemailer + imapflow), markdown-per-thread memory, stubbed calendar. Inbound: Elysia API, IMAP poller, CLI.
 - **`src/api`**, **`src/bootstrap.ts`, `src/config.ts`** — the one composition root that knows every concrete adapter; everything else only sees ports.
 
@@ -50,11 +51,14 @@ Perception → reasoning → action is a real loop, not a metaphor: the model ca
 
 ## Trade-offs
 
-- **tsx, no build step.** The container runs TypeScript directly rather than compiling to JS first. Right call at this scale (one process, one mailbox); a real production deploy would add a `tsc` build stage.
+- **tsx at runtime, Vite as a hygiene gate, not a rewrite.** The container still runs TypeScript directly via `tsx` (right call at this scale — one process, one mailbox). `pnpm build` (Vite, Node/SSR target, `node_modules` kept external) exists purely as a second, independent check that the source graph actually resolves and bundles — `tsc --noEmit` catches type errors, this catches bundling/circular-import issues tsc alone can miss. `dist/` is a CI artifact; it's not what `docker compose` runs.
+- **pnpm over npm.** Content-addressable store and a stricter `node_modules` layout (no phantom access to undeclared transitive deps) for negligible extra setup cost.
+- **ESLint, type-aware rules off.** `typescript-eslint`'s `recommended` (not `recommended-type-checked`) — `tsc --noEmit` already owns type correctness; ESLint's job here is dead code and footguns (unused vars, shadowing — the exact bug class caught by hand once in `llmOpenRouter.ts` before this was automated).
 - **Markdown memory over a database.** Trivial to inspect and git-diff; the cost is O(n) prospect lookup (scans thread files) — fine at dozens of threads, would need an index at thousands.
 - **`setInterval` polling over a job queue.** No distributed workers to coordinate, so BullMQ/cron infra would be solving a scale problem this project doesn't have.
 - **Structured JSON logging over pino/winston.** One process, no log-shipping pipeline to feed yet.
 - **`exactOptionalPropertyTypes` left off.** Kept `strict` + `noUncheckedIndexedAccess`; the exact-optional variant fought config/env plumbing for marginal benefit.
+- **Known harmless test noise.** `pnpm test` prints an `[exact-mirror] TypeCompiler is required to use Union` stack trace to stderr on the `/check-silence` test — an upstream Elysia/TypeBox schema-compiler quirk on `Optional` fields with this dependency combination. It's caught internally and doesn't affect the response or fail the test (all 50 pass); left as-is rather than restructuring a working route schema to silence a third-party log line.
 
 ## API
 
@@ -65,22 +69,57 @@ Perception → reasoning → action is a real loop, not a metaphor: the model ca
 | `GET /threads/:id` | full thread detail incl. message history |
 | `POST /outreach` | `{ prospectId, prospectName, prospectEmail }` — start a new thread |
 | `POST /poll` | manually trigger one inbound-mail poll cycle |
+| `POST /check-silence` | scan for quiet threads and nudge/close them; optional `{ thresholdMs, maxNudges }` body overrides config for a demo |
 
 All request bodies are validated with TypeBox (via Elysia's `t`); a schema mismatch returns `422` with the specific validation error, not a stack trace. Unexpected errors return a generic `500` + `incidentId`, logged server-side.
 
 ## Verification
 
 ```bash
-npm run typecheck   # tsc --noEmit, strict
-npm test            # 42 tests: domain, application (fakes), adapters, persistence round-trip, API, retry
-npm run test:coverage
-npm run transcripts  # regenerates transcripts/*.md from the real domain+application+persistence layers
+pnpm typecheck   # tsc --noEmit, strict
+pnpm lint        # eslint, flat config — 0 errors, 0 warnings
+pnpm build       # vite build — bundles cleanly to dist/ (CI-style check, not the runtime path)
+pnpm test        # 50 tests: domain, application (fakes), adapters, persistence round-trip, API, retry
+pnpm test:coverage
+pnpm transcripts # regenerates transcripts/*.md from the real domain+application+persistence layers
 ```
 
-`transcripts/` contains the three required sample threads, generated by actually running the code (only the LLM and mail transport are scripted, since neither an OpenRouter key nor Docker are available in this generation environment):
+`transcripts/` contains the three required sample threads plus one more, generated by actually running the code (only the LLM and mail transport are scripted, since neither an OpenRouter key nor Docker are available in this generation environment):
 
 - `scenario-1-successful-negotiation-and-booking.md`
 - `scenario-2-cancellation-and-rebooking.md` — the reschedule loop, run twice
 - `scenario-3-graceful-walk-away.md`
+- `scenario-4-silent-prospect-follow-up-and-close.md` — not brief-required, but "silent" is a named intent, so it gets the same real-code proof: nudged twice, then closed without a third email
 
-Loom walkthrough: _add link before submitting_.
+These four are generated with a scripted LLM and mail transport (no OpenRouter key or Docker available in this generation environment) — see the **Live demo runbook** below for the real, end-to-end version against an actual model and mailbox.
+
+## Live demo runbook
+
+The steps above prove the logic; this proves the real round-trip the brief asks for, against a real OpenRouter model and a real (Dockerized) SMTP/IMAP mailbox.
+
+```bash
+cp .env.example .env && # fill in OPENROUTER_API_KEY
+docker compose up --build   # wait for both mailserver and agent to report healthy
+
+# 1. Seed a prospect
+pnpm cli -- outreach --id p-1 --name Sam --email prospect@wakesmith.test
+
+# 2. Reply as the prospect (real SMTP into GreenMail's prospect mailbox)
+pnpm simulate-reply -- --to agent@wakesmith.test --body "Interested! My rate is \$85/hr, does that work?"
+
+# 3. Have the agent poll and react — this is the real OpenRouter tool-calling loop
+pnpm cli -- poll
+pnpm cli -- threads      # should show status "scheduled"
+
+# 4. Trigger the reschedule loop
+pnpm simulate-reply -- --to agent@wakesmith.test --body "Something came up — can we push the call?"
+pnpm cli -- poll
+pnpm cli -- threads      # still "scheduled", but on a new slot; rescheduleCount incremented
+
+# 5. Silent prospect: skip step 2/4 for a second seeded thread, then
+pnpm cli -- check-silence --threshold-ms 0
+```
+
+`pnpm simulate-reply` (see `scripts/simulateProspectReply.ts`) sends real SMTP mail from GreenMail's `prospect@wakesmith.test` account into the agent's inbox — it's the human side of the round-trip, standing in for an actual prospect's email client.
+
+Loom walkthrough: _add link before submitting, recorded from a run of the runbook above_.

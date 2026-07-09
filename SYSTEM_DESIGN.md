@@ -16,13 +16,13 @@ Four layers, matching the assignment's own framing (perception → reasoning →
  ------------              -------------------          ------------------
  IMAP poller     ----->    Agent loop (OpenRouter,       SMTP sender  -----> Prospect
  Intent classifier         chat-completions + tools)     inbox (Docker mail
- (interested/               Toolbelt:                     container)
-  objecting/                - get_thread_state
-  rescheduling/              - propose_terms(rate)
-  declining/silent)          - propose_slots(n)
-                             - book_slot / cancel_slot    Calendar (stubbed
-                             - send_email                  slot picker)
-                             - update_memory
+ (interested/curious/       Toolbelt:                     container)
+  objecting/declining/      - get_thread_state
+  rescheduling/other)       - propose_terms(rate)
+                            - propose_slots(n)
+ Silence check (elapsed     - book_slot / cancel_slot    Calendar (stubbed
+ time, not content) ---->   - decline                     slot picker)
+ followUpOnSilence
         ^                          |
         |                          v
         +------------------  MEMORY (markdown ledger
@@ -39,18 +39,19 @@ Perception, reasoning and action are separate functions/modules — the LLM only
 
 ```
 initiated -> negotiating -> scheduled -> completed
-                 ^              |
-                 |              v
-                 +----- reschedule_requested
-                 |              |
-                 +--------------+
-                 |
-                 +-> declined / walked_away   (terminal)
+   |              ^              |
+   |              |              v
+   |              +----- reschedule_requested
+   |              |              |
+   |              +--------------+
+   |              |
+   +--------------+-> declined / walked_away / no_response   (terminal)
 ```
 
-- Every inbound message re-hydrates the thread's full history + current state from SQLite before the LLM is called — nothing lives only in the LLM's context window.
+- Every inbound message re-hydrates the thread's full history + current state from its markdown file before the LLM is called — nothing lives only in the LLM's context window.
 - `reschedule_requested` re-enters `negotiating` with all prior terms/history intact, so the loop can run N times without the agent "forgetting" it already has a relationship with this prospect or re-negotiating rate from scratch.
 - Transitions are enforced in code, not by the LLM — e.g. `book_slot` is only a legal tool call from `negotiating`, so the agent can't double-book or reopen a `declined` thread on its own.
+- **`no_response`** is distinct from `declined` (explicit rejection) and `walked_away` (a budget decision): the prospect simply stopped replying. It's reached by `followUpOnSilence`, a use case triggered on elapsed time rather than message content — "silent" isn't something you classify from a reply, it's the absence of one. A quiet `initiated`/`negotiating` thread gets one nudge past a configurable threshold (default 3 days); after `maxNudges` (default 2) unanswered nudges, the thread closes as `no_response` — deliberately without sending a third email into the void.
 
 ## 4. Data model (file-based memory)
 
@@ -82,4 +83,4 @@ Full reasoning in the assumptions section below, short version: the brief's memo
 
 - GitHub repo + README (setup, architecture diagram, trade-offs) — this doc becomes the README's design section.
 - Loom (3–5 min): live demo walking the reschedule loop specifically.
-- Sample transcripts: (a) successful negotiation + booking, (b) cancellation + re-booking, (c) graceful walk-away when no fit.
+- Sample transcripts: (a) successful negotiation + booking, (b) cancellation + re-booking, (c) graceful walk-away when no fit, plus (d) a silent prospect nudged twice then closed — not a required transcript, but "silent" is one of the five intents the brief names, so it gets the same real-code proof as the other three.

@@ -34,6 +34,16 @@ interface ChatMessage {
   tool_call_id?: string;
 }
 
+interface ChatCompletionResponse {
+  choices: Array<{
+    message: {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+    };
+  }>;
+}
+
 const MAX_TOOL_ITERATIONS = 6;
 
 export class OpenRouterAgent implements LLMAgent {
@@ -43,7 +53,7 @@ export class OpenRouterAgent implements LLMAgent {
     this.baseUrl = config.baseUrl ?? "https://openrouter.ai/api/v1";
   }
 
-  private async chatCompletion(messages: ChatMessage[], useTools: boolean): Promise<any> {
+  private async chatCompletion(messages: ChatMessage[], useTools: boolean): Promise<ChatCompletionResponse> {
     return withRetry(
       async () => {
         const res = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -62,7 +72,7 @@ export class OpenRouterAgent implements LLMAgent {
           const body = await res.text();
           throw new Error(`OpenRouter request failed (${res.status}): ${body}`);
         }
-        return res.json();
+        return (await res.json()) as ChatCompletionResponse;
       },
       {
         retries: 2,
@@ -87,7 +97,7 @@ export class OpenRouterAgent implements LLMAgent {
       { role: "user", content: `Write the cold-open email to ${prospect.name}.` },
     ];
     const response = await this.chatCompletion(messages, false);
-    return response.choices[0].message.content ?? "";
+    return response.choices[0]!.message.content ?? "";
   }
 
   async classifyIntent(latestInboundBody: string): Promise<AgentIntent> {
@@ -98,8 +108,25 @@ export class OpenRouterAgent implements LLMAgent {
       { role: "user", content: latestInboundBody },
     ];
     const response = await this.chatCompletion(messages, false);
-    const label = (response.choices[0].message.content ?? "").trim().toLowerCase();
+    const label = (response.choices[0]!.message.content ?? "").trim().toLowerCase();
     return (labels as string[]).includes(label) ? (label as AgentIntent) : AgentIntent.OTHER;
+  }
+
+  async draftFollowUp(thread: Thread): Promise<string> {
+    const system = [
+      `You are writing a brief, polite check-in on behalf of a hiring team — the prospect went quiet after your last message about ${thread.gig.title}.`,
+      `Tone: ${thread.gig.tone}.`,
+      `This is nudge #${thread.negotiation.nudgeCount + 1}. Keep it short: reference that you reached out before, ask if they're still interested, no pressure. Body text only, no subject line.`,
+    ].join("\n");
+    const messages: ChatMessage[] = [
+      { role: "system", content: system },
+      ...thread.messages.map((m) => ({
+        role: (m.direction === "in" ? "user" : "assistant") as "user" | "assistant",
+        content: m.body,
+      })),
+    ];
+    const response = await this.chatCompletion(messages, false);
+    return response.choices[0]!.message.content ?? "";
   }
 
   async handleTurn(thread: Thread, _latestInboundBody: string, tools: AgentTools): Promise<AgentTurnResult> {
@@ -126,7 +153,7 @@ export class OpenRouterAgent implements LLMAgent {
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       const response = await this.chatCompletion(messages, true);
-      const message = response.choices[0].message;
+      const message = response.choices[0]!.message;
 
       if (!message.tool_calls || message.tool_calls.length === 0) {
         const intent = await this.classifyIntent(_latestInboundBody);
