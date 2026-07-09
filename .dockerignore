@@ -1,0 +1,10 @@
+node_modules
+.pnpm-store
+dist
+coverage
+.git
+.env
+*.log
+memory/threads
+memory/calendar_slots.json
+transcripts/.calendar_slots.json
